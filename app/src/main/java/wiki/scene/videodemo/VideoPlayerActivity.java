@@ -5,6 +5,7 @@ import android.app.Activity;
 import android.content.Intent;
 import android.graphics.SurfaceTexture;
 import android.media.MediaPlayer;
+import android.os.Build;
 import android.os.Bundle;
 import android.support.annotation.Nullable;
 import android.support.v7.app.AppCompatActivity;
@@ -66,7 +67,7 @@ public class VideoPlayerActivity extends AppCompatActivity implements TextureVie
         Intent intent = new Intent(activity, VideoPlayerActivity.class);
         intent.putExtra(ARG_TITLE, title);
         intent.putExtra(ARG_URL, url);
-        activity.startActivity(intent);
+        activity.startActivityForResult(intent, 1001);
     }
 
     @Override
@@ -79,6 +80,21 @@ public class VideoPlayerActivity extends AppCompatActivity implements TextureVie
         url = getIntent().getStringExtra(ARG_URL);
 
         tvTitle.setText(title);
+
+        fullscreen.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                onBackPressed();
+            }
+        });
+
+        btnOpenCdn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                setResult(RESULT_OK);
+                finish();
+            }
+        });
 
         ivBack.setOnClickListener(view -> {
             onBackPressed();
@@ -106,8 +122,8 @@ public class VideoPlayerActivity extends AppCompatActivity implements TextureVie
             @Override
             public void onProgressChanged(SeekBar seekBar, int i, boolean b) {
                 if (b) {
-                    if (mediaPlayer != null && mediaPlayer.isPlaying()) {
-                        mediaPlayer.seekTo((int) (i / 100f * mediaPlayer.getDuration()));
+                    if (mediaPlayer != null && mediaPlayer.getDuration() > 0) {
+                        current.setText(mathTime((int) (i / 100f * mediaPlayer.getDuration())));
                     }
                 }
             }
@@ -119,7 +135,17 @@ public class VideoPlayerActivity extends AppCompatActivity implements TextureVie
 
             @Override
             public void onStopTrackingTouch(SeekBar seekBar) {
-
+                if (mediaPlayer != null && mediaPlayer.isPlaying()) {
+                    loading.setVisibility(View.VISIBLE);
+                    if (mediaPlayer != null && mediaPlayer.isPlaying()) {
+                        mediaPlayer.pause();
+                    }
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        mediaPlayer.seekTo((int) (seekBar.getProgress() / 100f * mediaPlayer.getDuration()), MediaPlayer.SEEK_CLOSEST);
+                    } else {
+                        mediaPlayer.seekTo((int) (seekBar.getProgress() / 100f * mediaPlayer.getDuration()));
+                    }
+                }
             }
         });
 
@@ -127,6 +153,11 @@ public class VideoPlayerActivity extends AppCompatActivity implements TextureVie
             if (mediaPlayer != null && mediaPlayer.isPlaying()) {
                 current.setText(mathTime(mediaPlayer.getCurrentPosition()));
                 bottomSeekProgress.setProgress(mathProgress(mediaPlayer.getCurrentPosition()));
+                if (mediaPlayer.getCurrentPosition() > 5000) {
+                    mediaPlayer.pause();
+                    loading.setVisibility(View.VISIBLE);
+                    btnOpenCdn.setVisibility(View.VISIBLE);
+                }
             }
         });
 
@@ -184,7 +215,10 @@ public class VideoPlayerActivity extends AppCompatActivity implements TextureVie
             mediaPlayer.setOnSeekCompleteListener(new MediaPlayer.OnSeekCompleteListener() {
                 @Override
                 public void onSeekComplete(MediaPlayer mediaPlayer) {
-
+                    loading.setVisibility(View.INVISIBLE);
+                    if (mediaPlayer != null && !mediaPlayer.isPlaying()){
+                        mediaPlayer.start();
+                    }
                 }
             });
 
@@ -207,11 +241,16 @@ public class VideoPlayerActivity extends AppCompatActivity implements TextureVie
     @Override
     public boolean onSurfaceTextureDestroyed(SurfaceTexture surfaceTexture) {
         surfaceTexture = null;
-        surface = null;
         if (mediaPlayer != null) {
             mediaPlayer.stop();
             mediaPlayer.release();
+            mediaPlayer = null;
         }
+        if (surface != null) {
+            surface.release();
+            surface = null;
+        }
+
         return true;
     }
 
@@ -264,8 +303,17 @@ public class VideoPlayerActivity extends AppCompatActivity implements TextureVie
     }
 
     @Override
-    protected void onDestroy() {
+    public void onBackPressed() {
         RxTimerUtil.cancel();
-        super.onDestroy();
+        if (mediaPlayer != null) {
+            mediaPlayer.stop();
+            mediaPlayer.release();
+            mediaPlayer = null;
+        }
+        if (surface != null) {
+            surface.release();
+            surface = null;
+        }
+        super.onBackPressed();
     }
 }
